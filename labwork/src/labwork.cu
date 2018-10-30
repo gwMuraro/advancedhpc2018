@@ -124,7 +124,7 @@ void Labwork::labwork1_OpenMP() {
 void Labwork::labwork1_OpenMP_doublePragma() {
     int pixelCount = inputImage->width * inputImage->height;
     outputImage = static_cast<char *>(malloc(pixelCount * 3));
-    #pragma omp parallel for
+    #pragma omp target teams num_teams(4)
     for (int j = 0; j < 100; j++) {             // let's do it 100 times, otherwise it's too fast!
         #pragma omp parallel for
         for (int i = 0; i < pixelCount; i++) {
