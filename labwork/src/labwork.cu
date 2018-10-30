@@ -166,7 +166,24 @@ int getSPcores(cudaDeviceProp devProp) {
 }
 
 void Labwork::labwork2_GPU() {
-    
+	int number_of_devices; 
+	cudaGetDeviceCount(&number_of_devices);
+	printf("Number of devices : %.1d\n", number_of_devices);
+	for (int i = 0 ; i < number_of_devices ; i++) {
+		cudaDeviceProp properties ;
+		cudaGetDeviceProperties(&properties, i) ;
+
+		printf("Device n°%d\n", i);
+		printf("Name : %s\n", properties.name);
+		printf("\tCore info : Clock rate : %d | ", properties.clockRate);
+		printf("Number of cores : %d | ", getSPcores(properties));
+		printf("Number of multiprocessors : %d | ", properties.multiProcessorCount);
+		printf("Warp size : %d\n", properties.warpSize);
+		
+		printf("\tMemory info : \tClock rate : %d | ", properties.memoryClockRate);
+		printf("Bus width : %d | ", properties.memoryBusWidth);
+		printf("Band width : %dMB/s\n", 2*properties.memoryClockRate * (properties.memoryBusWidth / 8) / 1000000);
+	}
 }
 
 void Labwork::labwork3_GPU() {
