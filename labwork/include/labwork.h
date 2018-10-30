@@ -16,6 +16,7 @@ public:
 
     void labwork1_CPU();
     void labwork1_OpenMP();
+    void labwork1_OpenMP_doublePragma();
 
     void labwork2_GPU();
 
