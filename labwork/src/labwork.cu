@@ -188,32 +188,40 @@ void Labwork::labwork2_GPU() {
 
 // Kernel for labwork 3 
 __global__ void grayScale(uchar3 *input, uchar3 *output) {
+
 	int tid = threadIdx.x + blockIdx.x * blockDim.x;
-	output[tid].x = ((int) input[tid].x + (int) input[tid].y + (int) input[tid].z) / 3;
+	output[tid].x = (input[tid].x + input[tid].y + input[tid].z) / 3;
 	output[tid].z = output[tid].y = output[tid].x;
 }
 
 
 void Labwork::labwork3_GPU() {
 
+	// useful variables 
 	int pixelCount = inputImage->width * inputImage->height;
-	int blockSize = 64;
+	int blockSize = 1024;
 	int numBlock = pixelCount/blockSize ;
 
+	// Allocating the output image 
 	outputImage = static_cast<char *>(malloc(pixelCount * 3));
 
+	// Allocating the device memory for the image (input and output)
 	uchar3 * devInput ; 
 	uchar3 * devGray ;
 	
 	cudaMalloc(&devInput, pixelCount * sizeof(uchar3));
 	cudaMalloc(&devGray, pixelCount * sizeof(uchar3));
 
+	// Copying the data from CPU to GPU 
 	cudaMemcpy(devInput, inputImage->buffer, pixelCount * sizeof(uchar3), cudaMemcpyHostToDevice);
 	
+	// Using the kernel 
 	grayScale<<<numBlock, blockSize>>>(devInput, devGray) ; 
 	
+	// Gettting the results from GPU to CPU 
 	cudaMemcpy(devGray, outputImage, pixelCount * sizeof(uchar3), cudaMemcpyDeviceToHost);
-
+	
+	// FREEEE
 	cudaFree(devInput);
 	cudaFree(devGray);
 	
