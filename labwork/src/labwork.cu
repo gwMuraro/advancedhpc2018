@@ -189,7 +189,7 @@ void Labwork::labwork2_GPU() {
 // Kernel for labwork 3 
 __global__ void grayScale(uchar3 *input, uchar3 *output) {
 	int tid = threadIdx.x + blockIdx.x * blockDim.x;
-	output[tid].x = (input[tid].x + input[tid].y + input[tid].z) / 3;
+	output[tid].x = ((int) input[tid].x + (int) input[tid].y + (int) input[tid].z) / 3;
 	output[tid].z = output[tid].y = output[tid].x;
 }
 
