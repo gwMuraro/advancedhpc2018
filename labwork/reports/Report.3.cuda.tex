@@ -71,15 +71,49 @@
 \subsection{What’s the speedup?}
     
     \begin{verbatim}
-        # labwork 1
-        [...]
-        labwork 1 CPU ellapsed 3724.7ms
-        labwork with pragmas ellapsed 805.3ms
-        
-        
-        # labwork 3
-        [...]
-        labwork 3 ellapsed 77.6ms
+        ==== labwork 1 ../data/eiffel.jpg
+        USTH ICT Master 2018, Advanced Programming for HPC.
+        Warming up...
+        Starting labwork 1
+        labwork 1 CPU ellapsed 3070.2ms
+        labwork with double pragma ellapsed 719.6ms
+        labwork 1 ellapsed 786.1ms
+        ==== labwork 3 ../data/eiffel.jpg 16
+        USTH ICT Master 2018, Advanced Programming for HPC.
+        Warming up...
+        Starting labwork 3
+        labwork 3 ellapsed 61.7ms
+        ==== labwork 3 ../data/eiffel.jpg 32
+        USTH ICT Master 2018, Advanced Programming for HPC.
+        Warming up...
+        Starting labwork 3
+        labwork 3 ellapsed 78.0ms
+        ==== labwork 3 ../data/eiffel.jpg 64
+        USTH ICT Master 2018, Advanced Programming for HPC.
+        Warming up...
+        Starting labwork 3
+        labwork 3 ellapsed 79.4ms
+        ==== labwork 3 ../data/eiffel.jpg 128
+        USTH ICT Master 2018, Advanced Programming for HPC.
+        Warming up...
+        Starting labwork 3
+        labwork 3 ellapsed 78.5ms
+        ==== labwork 3 ../data/eiffel.jpg 256
+        USTH ICT Master 2018, Advanced Programming for HPC.
+        Warming up...
+        Starting labwork 3
+        labwork 3 ellapsed 102.6ms
+        ==== labwork 3 ../data/eiffel.jpg 512
+        USTH ICT Master 2018, Advanced Programming for HPC.
+        Warming up...
+        Starting labwork 3
+        labwork 3 ellapsed 102.7ms
+        ==== labwork 3 ../data/eiffel.jpg 1024
+        USTH ICT Master 2018, Advanced Programming for HPC.
+        Warming up...
+        Starting labwork 3
+        labwork 3 ellapsed 102.9ms
+
     \end{verbatim}
     
     Comparing with the single processor program, we divided by ~48 times the computing time. 
@@ -99,9 +133,9 @@
             xlabel={Block size ($2^x$)},
             ylabel={SpeedUp ($y*execution_time ~= 3000$)},
             xmin=4, xmax=10,
-            ymin=30, ymax=55,
+            ymin=20, ymax=55,
             xtick={4,5,6,7,8,9,10},
-            ytick={35, 40, 45, 50, 55},
+            ytick={20, 25, 30, 35, 40, 45, 50, 55},
             legend pos=north west,
             ymajorgrids=true,
             grid style=dashed,
@@ -112,14 +146,22 @@
             mark=square,
             ]
             coordinates { %% Remind : axis X = 2^x
-                (4, 45)(5,45)(6,45)(7,45)(8,44)(9,45)(10,45)
+            (4, 50)(5,39)(6,39)(7,39)(8,30)(9,30)(10,30)
             };
 
         \end{axis}
     \end{tikzpicture}
     \newline
-    We can see that there is not much difference between the number of block used and the speed up (always around 45 times faster than the non paralleled program).
-    However, it is important to note that the image was black on output, and it size was small compared to the base image. 
+    We can see that we gain some times by using GPU, but the more you use an important number of blocks, the more you will lost time in parralelization computing. 
+    \newLine 
+    However, there is a difference between the initial image and the processed gray-scaled image : 
+    
+    \begin{verbatim}
+        # ls -ll ../data/eiffel.jpg && ls -ll ./labwork3-gpu-out.jpg
+        [...] 1865948 [...] ../data/eiffel.jpg
+        [...] 1910376 [...] ./labwork3-gpu-out.jpg
+
+    \end{verbatim}
     
 \end{document}
 

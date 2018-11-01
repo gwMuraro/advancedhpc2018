@@ -221,7 +221,7 @@ void Labwork::labwork3_GPU(int blockSize) {
 	cudaMemcpy(devInput, inputImage->buffer, pixelCount * sizeof(uchar3), cudaMemcpyHostToDevice);
 	
 	// Using the kernel 
-	grayScale<<<pixelCount, blockSize>>>(devInput, devGray) ; 
+	grayScale<<<numBlock, blockSize>>>(devInput, devGray) ; 
 	
 	// Gettting the results from GPU to CPU 
 	cudaMemcpy(outputImage, devGray, pixelCount * sizeof(uchar3), cudaMemcpyDeviceToHost);
@@ -247,7 +247,7 @@ void Labwork::labwork4_GPU(int blockSize) {
 	// We set grid size and block size as dim3 variables
 	dim3 gridSize = dim3(8, 8);
 	dim3 blockSize2 = dim3(32, 32);
-
+	
 
 	// Allocating the output image 
 	outputImage = static_cast<char *>(malloc(pixelCount * 3));
