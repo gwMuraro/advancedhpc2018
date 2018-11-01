@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
 
     // GM : added argument for lab 3
     int blockSize = (argv[3] != NULL ?atoi(argv[3]):1024) ;
-
+    int blockNumber = (argv[3] != NULL && atoi(argv[3]) < 33) ? atoi(argv[3]) : 32 ;
 
 
     printf("Starting labwork %d\n", lwNum);
@@ -58,7 +58,7 @@ int main(int argc, char **argv) {
             labwork.saveOutputImage("labwork3-gpu-out.jpg");
             break;
         case 4:
-            labwork.labwork4_GPU(blockSize);
+            labwork.labwork4_GPU(blockNumber);
             labwork.saveOutputImage("labwork4-gpu-out.jpg");
             break;
         case 5:
@@ -233,20 +233,22 @@ void Labwork::labwork3_GPU(int blockSize) {
 }
 
 // Kernel for labwork 4
-__global__ void grayScale2D(uchar3 *input, uchar3 *output) {
-	int tid = threadIdx.x + blockIdx.x * blockDim.x;
+__global__ void grayScale2D(uchar3 *input, uchar3 *output, int totalWidth) {
+	
+	//getting the pixel with the second dimension
+	int tid = (threadIdx.x + blockIdx.x * blockDim.x) + (totalWidth * (threadIdx.y + blockIdx.y * blockDim.y));
 	output[tid].x = (input[tid].x + input[tid].y + input[tid].z) / 3;
 	output[tid].z = output[tid].y = output[tid].x;
 }
 
 
-void Labwork::labwork4_GPU(int blockSize) {
+void Labwork::labwork4_GPU(int blockNumber) {
 	// useful variables 
 	int pixelCount = inputImage->width * inputImage->height;
 
 	// We set grid size and block size as dim3 variables
-	dim3 gridSize = dim3(8, 8);
-	dim3 blockSize2 = dim3(32, 32);
+	dim3 gridSize = dim3(inputImage->width / blockNumber, inputImage->height / blockNumber);
+	dim3 blockSize2 = dim3(blockNumber, blockNumber);
 	
 
 	// Allocating the output image 
@@ -263,10 +265,10 @@ void Labwork::labwork4_GPU(int blockSize) {
 	cudaMemcpy(devInput, inputImage->buffer, pixelCount * sizeof(uchar3), cudaMemcpyHostToDevice);
 	
 	// Using the kernel with the dim3 block and grid size
-	grayScale<<<gridSize, blockSize2>>>(devInput, devGray) ; 
+	grayScale2D<<<gridSize, blockSize2>>>(devInput, devGray, inputImage->width) ; 
 	
 	// Gettting the results from GPU to CPU 
-	cudaMemcpy(devGray, outputImage, pixelCount * sizeof(uchar3), cudaMemcpyDeviceToHost);
+	cudaMemcpy(outputImage, devGray, pixelCount * sizeof(uchar3), cudaMemcpyDeviceToHost);
 	
 	// FREEEE
 	cudaFree(devInput);
