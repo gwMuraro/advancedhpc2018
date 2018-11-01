@@ -28,6 +28,12 @@ int main(int argc, char **argv) {
         labwork.loadInputImage(inputFilename);
     }
 
+
+    // GM : added argument for lab 3
+    int blockSize = (argv[3] != NULL ?atoi(argv[3]):1024) ;
+
+
+
     printf("Starting labwork %d\n", lwNum);
     Timer timer;
     timer.start();
@@ -48,7 +54,7 @@ int main(int argc, char **argv) {
             labwork.labwork2_GPU();
             break;
         case 3:
-            labwork.labwork3_GPU();
+            labwork.labwork3_GPU(blockSize);
             labwork.saveOutputImage("labwork3-gpu-out.jpg");
             break;
         case 4:
@@ -195,11 +201,11 @@ __global__ void grayScale(uchar3 *input, uchar3 *output) {
 }
 
 
-void Labwork::labwork3_GPU() {
+void Labwork::labwork3_GPU(int blockSize) {
 
 	// useful variables 
 	int pixelCount = inputImage->width * inputImage->height;
-	int blockSize = 1024;
+	// int blockSize = atoi(argv[3]); // replace by the argument
 	int numBlock = pixelCount/blockSize ;
 
 	// Allocating the output image 
