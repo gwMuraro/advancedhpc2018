@@ -152,7 +152,7 @@
         \end{axis}
     \end{tikzpicture}
     \newline
-    We can see that we gain some times by using GPU, but the more you use an important number of blocks, the more you will lost time in parralelization computing. 
+    We can see that we gain some times by using GPU. It is important to know that image is black ith a block size set from 16 to 256 (explaining the low computing time). So the right number of blocks is 256 to 1024 in order to have a good gray-scaled image. 
     \newLine 
     However, there is a difference between the initial image and the processed gray-scaled image : 
     
