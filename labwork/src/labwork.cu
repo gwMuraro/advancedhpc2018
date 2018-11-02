@@ -315,16 +315,24 @@ void Labwork::labwork5_CPU() {
 }
 
 // Kernel for lab 5
-__global__ void gaussianBlur (uchar3 * input, uchar3 * output, int * weight, int imageWidth, int imageHeight) {
+__global__ void gaussianBlur (uchar3 * input, uchar3 * output, int imageWidth, int imageHeight) {
+	
+	int blurMatrix[] = {0, 0,  1,  2,   1,  0,  0,  
+                     	0, 3,  13, 22,  13, 3,  0,  
+                     	1, 13, 59, 97,  59, 13, 1,  
+                     	2, 22, 97, 159, 97, 22, 2,  
+                     	1, 13, 59, 97,  59, 13, 1,  
+                     	0, 3,  13, 22,  13, 3,  0,
+                     	0, 0,  1,  2,   1,  0,  0 };
 	
 	
 	int tidx = (threadIdx.x + blockIdx.x * blockDim.x) ;
 	int tidy = imageWidth * (threadIdx.y + blockIdx.y * blockDim.y) ;
-	int originTid = tidx + tidy * imageWidth ;
+	int originTid = tidx + tidy * imageWidth ;// getting the center pixel 
 	int relativTid;
 
 	// if the pixel is in the pixel 
-	if( tidx > imageWidth || tidy > imageHeight) return ;
+	if( tidx >= imageWidth || tidy >= imageHeight) return ;
 	
 	// sum of the pixel (weight * value) and coeficient 
 	int sum = 0 ;
@@ -335,25 +343,24 @@ __global__ void gaussianBlur (uchar3 * input, uchar3 * output, int * weight, int
 		for (int j = -3 ; j < 3 ; j++) {
 			
 			// getting the relative position of our relativPixel in X and Y
-			i += tidx ;
-			j += tidy ;
+			int x = tidx + i ;
+			int y = tidy + j ;
 			
-			// Checking if it is not out of bounds... SEGFAULT ! nah, just kidding x)
-			if (i > imageWidth  || i < 0) continue ;
-			if (j > imageHeight || j < 0) continue ;
+			// Checking if it is not out of bounds...
+			if (x >= imageWidth  || x < 0) continue ;
+			if (y >= imageHeight || y < 0) continue ;
 
 			// working on a specific pixel relative to the threaded pixel
-			relativTid = imageWidth * j + i ;
+			relativTid = imageWidth * y + x ;
 			
 			// applying the blur on gray pixel 
 			unsigned char gray = (input[relativTid].x + input[relativTid].y + input[relativTid].z) /3;
-            int coefficient = weight[(j+3) * 7 + i + 3];
-            sum += (gray * coefficient) ;
-            coef += coefficient;		
+            int coefficient = blurMatrix[(j+3) * 7 + (i+3)];
+            sum  = sum + gray * coefficient ;
+            coef += coefficient;
 		}
 	}
 	sum /= coef;
-	
 	output[originTid].x = output[originTid].y = output[originTid].z = sum ;
 }
 
@@ -361,16 +368,11 @@ __global__ void gaussianBlur (uchar3 * input, uchar3 * output, int * weight, int
 void Labwork::labwork5_GPU(int blockNumber) {
 	// useful variables 
 	int pixelCount = inputImage->width * inputImage->height;
-	int blurMatrix[] = {0, 0,  1,  2,   1,  0,  0,  
-                     	0, 3,  13, 22,  13, 3,  0,  
-                     	1, 13, 59, 97,  59, 13, 1,  
-                     	2, 22, 97, 159, 97, 22, 2,  
-                     	1, 13, 59, 97,  59, 13, 1,  
-                     	0, 3,  13, 22,  13, 3,  0,
-                     	0, 0,  1,  2,   1,  0,  0 };
+
+	
 	// We set grid size and block size as dim3 variables
 	dim3 gridSize = dim3(inputImage->width / blockNumber, inputImage->height / blockNumber);
-	dim3 blockSize2 = dim3(blockNumber, blockNumber);
+	dim3 blockSize2 = dim3(32, 32);
 	
 
 	// Allocating the output image 
@@ -387,7 +389,7 @@ void Labwork::labwork5_GPU(int blockNumber) {
 	cudaMemcpy(devInput, inputImage->buffer, pixelCount * sizeof(uchar3), cudaMemcpyHostToDevice);
 	
 	// Using the kernel with the dim3 block and grid size
-	gaussianBlur<<<gridSize, blockSize2>>>(devInput, devBlur, blurMatrix, inputImage->width, inputImage->height) ; 
+	gaussianBlur<<<gridSize, blockSize2>>>(devInput, devBlur, inputImage->width, inputImage->height) ; 
 	
 	// Gettting the results from GPU to CPU 
 	cudaMemcpy(outputImage, devBlur, pixelCount * sizeof(uchar3), cudaMemcpyDeviceToHost);
