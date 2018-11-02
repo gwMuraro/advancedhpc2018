@@ -32,6 +32,7 @@ int main(int argc, char **argv) {
     // GM : added argument for lab 3
     int blockSize = (argv[3] != NULL ?atoi(argv[3]):1024) ;
     int blockNumber = (argv[3] != NULL && atoi(argv[3]) < 33) ? atoi(argv[3]) : 32 ;
+	int blurDim = (argv[4] != NULL ?atoi(argv[4]):3) ;
 
 
     printf("Starting labwork %d\n", lwNum);
@@ -63,8 +64,10 @@ int main(int argc, char **argv) {
             break;
         case 5:
             labwork.labwork5_CPU();
+            printf("labwork %d ellapsed %.1fms (CPU)\n", lwNum, timer.getElapsedTimeInMilliSec());
             labwork.saveOutputImage("labwork5-cpu-out.jpg");
-            labwork.labwork5_GPU(blockNumber);
+            timer.start() ;
+            labwork.labwork5_GPU(blockNumber, blurDim);
             labwork.saveOutputImage("labwork5-gpu-out.jpg");
             break;
         case 6:
@@ -315,7 +318,22 @@ void Labwork::labwork5_CPU() {
 }
 
 // Kernel for lab 5
-__global__ void gaussianBlur (uchar3 * input, uchar3 * output, int imageWidth, int imageHeight) {
+__global__ void gaussianBlur (uchar3 * input, uchar3 * output, int * weight, int imageWidth, int imageHeight, int blurDim) {
+	
+//	__shared__ int blurMatrix[49] ;
+	
+//	blurMatrix = weight ;
+	
+	/*
+	{0, 0,  1,  2,   1,  0,  0,  
+                     	0, 3,  13, 22,  13, 3,  0,  
+                     	1, 13, 59, 97,  59, 13, 1,  
+                     	2, 22, 97, 159, 97, 22, 2,  
+                     	1, 13, 59, 97,  59, 13, 1,  
+                     	0, 3,  13, 22,  13, 3,  0,
+                     	0, 0,  1,  2,   1,  0,  0 }
+	*/
+//	__syncthreads() ;
 	
 	int blurMatrix[] = {0, 0,  1,  2,   1,  0,  0,  
                      	0, 3,  13, 22,  13, 3,  0,  
@@ -324,11 +342,9 @@ __global__ void gaussianBlur (uchar3 * input, uchar3 * output, int imageWidth, i
                      	1, 13, 59, 97,  59, 13, 1,  
                      	0, 3,  13, 22,  13, 3,  0,
                      	0, 0,  1,  2,   1,  0,  0 };
-	
-	
-	int tidx = (threadIdx.x + blockIdx.x * blockDim.x) ;
-	int tidy = imageWidth * (threadIdx.y + blockIdx.y * blockDim.y) ;
-	int originTid = tidx + tidy * imageWidth ;// getting the center pixel 
+	int tidx = threadIdx.x + blockIdx.x * blockDim.x ;
+	int tidy = threadIdx.y + blockIdx.y * blockDim.y ;
+	int originTid = tidx +  imageWidth *  tidy ;// getting the center pixel 
 	int relativTid;
 
 	// if the pixel is in the pixel 
@@ -339,8 +355,8 @@ __global__ void gaussianBlur (uchar3 * input, uchar3 * output, int imageWidth, i
 	int coef = 0 ;
 	
 	// Process the 9 pixels 
-	for (int i = -3 ; i < 3 ; i++){
-		for (int j = -3 ; j < 3 ; j++) {
+	for (int i = -(blurDim) ; i < (blurDim) ; i++){
+		for (int j = -(blurDim) ; j < (blurDim) ; j++) {
 			
 			// getting the relative position of our relativPixel in X and Y
 			int x = tidx + i ;
@@ -355,7 +371,7 @@ __global__ void gaussianBlur (uchar3 * input, uchar3 * output, int imageWidth, i
 			
 			// applying the blur on gray pixel 
 			unsigned char gray = (input[relativTid].x + input[relativTid].y + input[relativTid].z) /3;
-            int coefficient = blurMatrix[(j+3) * 7 + (i+3)];
+            int coefficient = blurMatrix[(j+(blurDim)) * 7 + (i+(blurDim))];
             sum  = sum + gray * coefficient ;
             coef += coefficient;
 		}
@@ -365,14 +381,26 @@ __global__ void gaussianBlur (uchar3 * input, uchar3 * output, int imageWidth, i
 }
 
 
-void Labwork::labwork5_GPU(int blockNumber) {
+void Labwork::labwork5_GPU(int blockNumber, int blurDim) {
+	
+	int blurMatrix[] = 
+
+	{0, 0,  1,  2,   1,  0,  0,  
+                     	0, 3,  13, 22,  13, 3,  0,  
+                     	1, 13, 59, 97,  59, 13, 1,  
+                     	2, 22, 97, 159, 97, 22, 2,  
+                     	1, 13, 59, 97,  59, 13, 1,  
+                     	0, 3,  13, 22,  13, 3,  0,
+                     	0, 0,  1,  2,   1,  0,  0 }
+;
+	
 	// useful variables 
 	int pixelCount = inputImage->width * inputImage->height;
 
 	
 	// We set grid size and block size as dim3 variables
 	dim3 gridSize = dim3(inputImage->width / blockNumber, inputImage->height / blockNumber);
-	dim3 blockSize2 = dim3(32, 32);
+	dim3 blockSize2 = dim3(blockNumber, blockNumber);
 	
 
 	// Allocating the output image 
@@ -389,7 +417,7 @@ void Labwork::labwork5_GPU(int blockNumber) {
 	cudaMemcpy(devInput, inputImage->buffer, pixelCount * sizeof(uchar3), cudaMemcpyHostToDevice);
 	
 	// Using the kernel with the dim3 block and grid size
-	gaussianBlur<<<gridSize, blockSize2>>>(devInput, devBlur, inputImage->width, inputImage->height) ; 
+	gaussianBlur<<<gridSize, blockSize2>>>(devInput, devBlur, blurMatrix, inputImage->width, inputImage->height, blurDim) ; 
 	
 	// Gettting the results from GPU to CPU 
 	cudaMemcpy(outputImage, devBlur, pixelCount * sizeof(uchar3), cudaMemcpyDeviceToHost);
