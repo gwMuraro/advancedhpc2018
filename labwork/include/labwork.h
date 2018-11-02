@@ -26,7 +26,7 @@ public:
 
     void labwork5_CPU();
     void labwork5_GPU(int blockNumber, int blurDim);
-
+    void labwork5_GPU_not_shared(int blockNumber, int blurDim) ;
     void labwork6_GPU();
 
     void labwork7_GPU();
