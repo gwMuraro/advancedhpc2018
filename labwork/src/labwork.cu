@@ -64,7 +64,7 @@ int main(int argc, char **argv) {
         case 5:
             labwork.labwork5_CPU();
             labwork.saveOutputImage("labwork5-cpu-out.jpg");
-            labwork.labwork5_GPU();
+            labwork.labwork5_GPU(blockNumber);
             labwork.saveOutputImage("labwork5-gpu-out.jpg");
             break;
         case 6:
@@ -276,15 +276,16 @@ void Labwork::labwork4_GPU(int blockNumber) {
    
 }
 
+
 // CPU implementation of Gaussian Blur
 void Labwork::labwork5_CPU() {
-    int kernel[] = { 0, 0, 1, 2, 1, 0, 0,  
-                     0, 3, 13, 22, 13, 3, 0,  
-                     1, 13, 59, 97, 59, 13, 1,  
+    int kernel[] = { 0, 0,  1,  2,   1,  0,  0,  
+                     0, 3,  13, 22,  13, 3,  0,  
+                     1, 13, 59, 97,  59, 13, 1,  
                      2, 22, 97, 159, 97, 22, 2,  
-                     1, 13, 59, 97, 59, 13, 1,  
-                     0, 3, 13, 22, 13, 3, 0,
-                     0, 0, 1, 2, 1, 0, 0 };
+                     1, 13, 59, 97,  59, 13, 1,  
+                     0, 3,  13, 22,  13, 3,  0,
+                     0, 0,  1,  2,   1,  0,  0 };
     int pixelCount = inputImage->width * inputImage->height;
     outputImage = (char*) malloc(pixelCount * sizeof(char) * 3);
     for (int row = 0; row < inputImage->height; row++) {
@@ -313,7 +314,88 @@ void Labwork::labwork5_CPU() {
     }
 }
 
-void Labwork::labwork5_GPU() {
+// Kernel for lab 5
+__global__ void gaussianBlur (uchar3 * input, uchar3 * output, int * weight, int imageWidth, int imageHeight) {
+	
+	
+	int tidx = (threadIdx.x + blockIdx.x * blockDim.x) ;
+	int tidy = imageWidth * (threadIdx.y + blockIdx.y * blockDim.y) ;
+	int originTid = tidx + tidy * imageWidth ;
+	int relativTid;
+
+	// if the pixel is in the pixel 
+	if( tidx > imageWidth || tidy > imageHeight) return ;
+	
+	// sum of the pixel (weight * value) and coeficient 
+	int sum = 0 ;
+	int coef = 0 ;
+	
+	// Process the 9 pixels 
+	for (int i = -3 ; i < 3 ; i++){
+		for (int j = -3 ; j < 3 ; j++) {
+			
+			// getting the relative position of our relativPixel in X and Y
+			i += tidx ;
+			j += tidy ;
+			
+			// Checking if it is not out of bounds... SEGFAULT ! nah, just kidding x)
+			if (i > imageWidth  || i < 0) continue ;
+			if (j > imageHeight || j < 0) continue ;
+
+			// working on a specific pixel relative to the threaded pixel
+			relativTid = imageWidth * j + i ;
+			
+			// applying the blur on gray pixel 
+			unsigned char gray = (input[relativTid].x + input[relativTid].y + input[relativTid].z) /3;
+            int coefficient = weight[(j+3) * 7 + i + 3];
+            sum += (gray * coefficient) ;
+            coef += coefficient;		
+		}
+	}
+	sum /= coef;
+	
+	output[originTid].x = output[originTid].y = output[originTid].z = sum ;
+}
+
+
+void Labwork::labwork5_GPU(int blockNumber) {
+	// useful variables 
+	int pixelCount = inputImage->width * inputImage->height;
+	int blurMatrix[] = {0, 0,  1,  2,   1,  0,  0,  
+                     	0, 3,  13, 22,  13, 3,  0,  
+                     	1, 13, 59, 97,  59, 13, 1,  
+                     	2, 22, 97, 159, 97, 22, 2,  
+                     	1, 13, 59, 97,  59, 13, 1,  
+                     	0, 3,  13, 22,  13, 3,  0,
+                     	0, 0,  1,  2,   1,  0,  0 };
+	// We set grid size and block size as dim3 variables
+	dim3 gridSize = dim3(inputImage->width / blockNumber, inputImage->height / blockNumber);
+	dim3 blockSize2 = dim3(blockNumber, blockNumber);
+	
+
+	// Allocating the output image 
+	outputImage = static_cast<char *>(malloc(pixelCount * 3));
+
+	// Allocating the device memory for the image (input and output)
+	uchar3 * devInput ; 
+	uchar3 * devBlur ;
+	
+	cudaMalloc(&devInput, pixelCount * sizeof(uchar3));
+	cudaMalloc(&devBlur, pixelCount * sizeof(uchar3));
+
+	// Copying the data from CPU to GPU 
+	cudaMemcpy(devInput, inputImage->buffer, pixelCount * sizeof(uchar3), cudaMemcpyHostToDevice);
+	
+	// Using the kernel with the dim3 block and grid size
+	gaussianBlur<<<gridSize, blockSize2>>>(devInput, devBlur, blurMatrix, inputImage->width, inputImage->height) ; 
+	
+	// Gettting the results from GPU to CPU 
+	cudaMemcpy(outputImage, devBlur, pixelCount * sizeof(uchar3), cudaMemcpyDeviceToHost);
+	
+	// FREEEE
+	cudaFree(devInput);
+	cudaFree(devBlur);
+   
     
 }
 
