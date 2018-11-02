@@ -320,28 +320,14 @@ void Labwork::labwork5_CPU() {
 // Kernel for lab 5
 __global__ void gaussianBlur (uchar3 * input, uchar3 * output, int * weight, int imageWidth, int imageHeight, int blurDim) {
 	
-//	__shared__ int blurMatrix[49] ;
+	__shared__ int blurMatrix[49] ;
 	
-//	blurMatrix = weight ;
+	if (threadIdx.x <= 49) {
+		blurMatrix[threadIdx.x] = weight[threadIdx.x] ;
+	}
+
+	__syncthreads() ;
 	
-	/*
-	{0, 0,  1,  2,   1,  0,  0,  
-                     	0, 3,  13, 22,  13, 3,  0,  
-                     	1, 13, 59, 97,  59, 13, 1,  
-                     	2, 22, 97, 159, 97, 22, 2,  
-                     	1, 13, 59, 97,  59, 13, 1,  
-                     	0, 3,  13, 22,  13, 3,  0,
-                     	0, 0,  1,  2,   1,  0,  0 }
-	*/
-//	__syncthreads() ;
-	
-	int blurMatrix[] = {0, 0,  1,  2,   1,  0,  0,  
-                     	0, 3,  13, 22,  13, 3,  0,  
-                     	1, 13, 59, 97,  59, 13, 1,  
-                     	2, 22, 97, 159, 97, 22, 2,  
-                     	1, 13, 59, 97,  59, 13, 1,  
-                     	0, 3,  13, 22,  13, 3,  0,
-                     	0, 0,  1,  2,   1,  0,  0 };
 	int tidx = threadIdx.x + blockIdx.x * blockDim.x ;
 	int tidy = threadIdx.y + blockIdx.y * blockDim.y ;
 	int originTid = tidx +  imageWidth *  tidy ;// getting the center pixel 
@@ -383,16 +369,13 @@ __global__ void gaussianBlur (uchar3 * input, uchar3 * output, int * weight, int
 
 void Labwork::labwork5_GPU(int blockNumber, int blurDim) {
 	
-	int blurMatrix[] = 
-
-	{0, 0,  1,  2,   1,  0,  0,  
+	int blurMatrix[] = {0, 0,  1,  2,   1,  0,  0,  
                      	0, 3,  13, 22,  13, 3,  0,  
                      	1, 13, 59, 97,  59, 13, 1,  
                      	2, 22, 97, 159, 97, 22, 2,  
                      	1, 13, 59, 97,  59, 13, 1,  
                      	0, 3,  13, 22,  13, 3,  0,
-                     	0, 0,  1,  2,   1,  0,  0 }
-;
+                     	0, 0,  1,  2,   1,  0,  0 };
 	
 	// useful variables 
 	int pixelCount = inputImage->width * inputImage->height;
@@ -406,18 +389,21 @@ void Labwork::labwork5_GPU(int blockNumber, int blurDim) {
 	// Allocating the output image 
 	outputImage = static_cast<char *>(malloc(pixelCount * 3));
 
-	// Allocating the device memory for the image (input and output)
+	// Allocating the device memory for the image (input and output) and weight matrix
 	uchar3 * devInput ; 
 	uchar3 * devBlur ;
+	int * devWeight ;
 	
 	cudaMalloc(&devInput, pixelCount * sizeof(uchar3));
 	cudaMalloc(&devBlur, pixelCount * sizeof(uchar3));
-
+	cudaMalloc(&devWeight, sizeof(blurMatrix)); 
+	
 	// Copying the data from CPU to GPU 
 	cudaMemcpy(devInput, inputImage->buffer, pixelCount * sizeof(uchar3), cudaMemcpyHostToDevice);
+	cudaMemcpy(devWeight, blurMatrix, sizeof(blurMatrix), cudaMemcpyHostToDevice);
 	
 	// Using the kernel with the dim3 block and grid size
-	gaussianBlur<<<gridSize, blockSize2>>>(devInput, devBlur, blurMatrix, inputImage->width, inputImage->height, blurDim) ; 
+	gaussianBlur<<<gridSize, blockSize2>>>(devInput, devBlur, devWeight, inputImage->width, inputImage->height, blurDim) ; 
 	
 	// Gettting the results from GPU to CPU 
 	cudaMemcpy(outputImage, devBlur, pixelCount * sizeof(uchar3), cudaMemcpyDeviceToHost);
@@ -425,7 +411,7 @@ void Labwork::labwork5_GPU(int blockNumber, int blurDim) {
 	// FREEEE
 	cudaFree(devInput);
 	cudaFree(devBlur);
-   
+    cudaFree(devWeight) ;
     
 }
 
