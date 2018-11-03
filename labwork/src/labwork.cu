@@ -83,13 +83,19 @@ int main(int argc, char **argv) {
             break;
             
         case 6:
+        	timer.start() ; 
             labwork.labwork6_GPU_binarization(blockNumber);
-            labwork.saveOutputImage("labwork6a-gpu-out.jpg");
-
+            printf("labwork %da ellapsed %.1fms (binarization)\n", lwNum, timer.getElapsedTimeInMilliSec());
+			labwork.saveOutputImage("labwork6a-gpu-out.jpg");
+			
+			timer.start() ;
             labwork.labwork6_GPU_brightness(blockNumber, brightness);
+            printf("labwork %db ellapsed %.1fms (brightness control)\n", lwNum, timer.getElapsedTimeInMilliSec());
             labwork.saveOutputImage("labwork6b-gpu-out.jpg");
 
+			timer.start() ;
             labwork.labwork6_GPU_blending(blockNumber);
+            printf("labwork %dc ellapsed %.1fms (blending)\n", lwNum, timer.getElapsedTimeInMilliSec());
             labwork.saveOutputImage("labwork6c-gpu-out.jpg");
             break;
         case 7:
@@ -582,12 +588,12 @@ __global__ void brightness(uchar3 *input, uchar3 *output, int imageWidth, int im
 	if (tidx >= imageWidth || tidy >= imageHeight) return ;
 
 	int tid = tidx + imageWidth * tidy ;
-	unsigned char gray = (input[tid].x + input[tid].y + input[tid].z) /3;
-	int brightPx = gray + brightnessValue ; 
-	output[tid].z = output[tid].y = output[tid].x = brightPx ;
+
+	int gray = (input[tid].z + input[tid].y + input[tid].x) / 3 ; 
+	output[tid].z = output[tid].y = output[tid].x = gray + brightnessValue ; 
 }
 
-void labwork6_GPU_brightness(int blockNumber, int brightnessValue){
+void Labwork::labwork6_GPU_brightness(int blockNumber, int brightnessValue){
 	
 	// useful variables 
 	int pixelCount = inputImage->width * inputImage->height;
@@ -621,6 +627,22 @@ void labwork6_GPU_brightness(int blockNumber, int brightnessValue){
 	cudaFree(devInput);
 	cudaFree(devBrighted);
 }
+
+// Kernel for lab 6c
+__global__ void blending(uchar3 *input, uchar3 *output, int imageWidth, int imageHeight, int brightnessValue) {
+	
+	//getting the pixel with the second dimension
+	int tidx = (threadIdx.x + blockIdx.x * blockDim.x) ; 
+	int tidy = (threadIdx.y + blockIdx.y * blockDim.y) ;
+
+	if (tidx >= imageWidth || tidy >= imageHeight) return ;
+
+	int tid = tidx + imageWidth * tidy ;
+	int brightPx = (input[tid].x + input[tid].y + input[tid].z) /3 + brightnessValue ;
+	output[tid].z = output[tid].y = output[tid].x = brightPx ;
+}
+void Labwork::labwork6_GPU_blending(int blockNumber) {}
+
 
 void Labwork::labwork7_GPU() {
 
