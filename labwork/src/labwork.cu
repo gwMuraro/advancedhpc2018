@@ -8,7 +8,7 @@
 int main(int argc, char **argv) {
     printf("USTH ICT Master 2018, Advanced Programming for HPC.\n");
     if (argc < 2) {
-        printf("Usage: labwork <lwNum> <inputImage>\n");
+        printf("Usage: labwork <lwNum> <inputImage> <block number || blocksize> <Blur intensity || brightness>\n");
         printf("   lwNum        labwork number\n");
         printf("   inputImage   the input file name, in JPEG format\n");
         return 0;
@@ -30,9 +30,10 @@ int main(int argc, char **argv) {
 
 
     // GM : added argument for lab 3
-    int blockSize = (argv[3] != NULL ?atoi(argv[3]):1024) ;
+    int blockSize = (argv[3] != NULL ? atoi(argv[3]) : 1024) ;
     int blockNumber = (argv[3] != NULL && atoi(argv[3]) < 33) ? atoi(argv[3]) : 32 ;
 	int blurDim = 3 ; // TODO : non-working default value : fix dat :'(
+	int brightness = (argv[4] != NULL && argv[4] != 0) ? atoi(argv[4]) : 100;
 
 	//printf("BN BD %d %d\n", blockNumber, blurDim) ;
 
@@ -82,8 +83,14 @@ int main(int argc, char **argv) {
             break;
             
         case 6:
-            labwork.labwork6_GPU();
-            labwork.saveOutputImage("labwork6-gpu-out.jpg");
+            labwork.labwork6_GPU_binarization(blockNumber);
+            labwork.saveOutputImage("labwork6a-gpu-out.jpg");
+
+            labwork.labwork6_GPU_brightness(blockNumber, brightness);
+            labwork.saveOutputImage("labwork6b-gpu-out.jpg");
+
+            labwork.labwork6_GPU_blending(blockNumber);
+            labwork.saveOutputImage("labwork6c-gpu-out.jpg");
             break;
         case 7:
             labwork.labwork7_GPU();
@@ -102,7 +109,7 @@ int main(int argc, char **argv) {
             labwork.saveOutputImage("labwork10-gpu-out.jpg");
             break;
     }
-    printf("labwork %d ellapsed %.1fms\n", lwNum, timer.getElapsedTimeInMilliSec());
+    //printf("labwork %d ellapsed %.1fms\n", lwNum, timer.getElapsedTimeInMilliSec());
 }
 
 void Labwork::loadInputImage(std::string inputFileName) {
@@ -436,14 +443,17 @@ __global__ void gaussianBlur (uchar3 * input, uchar3 * output, int imageWidth, i
                      	1, 13, 59, 97,  59, 13, 1,  
                      	0, 3,  13, 22,  13, 3,  0,
                      	0, 0,  1,  2,   1,  0,  0 };
+	
+	// getting the pixel location 
 	int tidx = threadIdx.x + blockIdx.x * blockDim.x ;
 	int tidy = threadIdx.y + blockIdx.y * blockDim.y ;
-	int originTid = tidx +  imageWidth *  tidy ;// getting the center pixel 
-	int relativTid;
+	int originTid = tidx +  imageWidth *  tidy ;// getting the center pixel 	
+	int relativTid; // this px is nearby the center pixel
 
-	// if the pixel is in the pixel 
+	// if the center pixel is not out of bound 
 	if( tidx >= imageWidth || tidy >= imageHeight) return ;
 	
+	/* ALGORITHM IMPLEMENTATION */
 	// sum of the pixel (weight * value) and coeficient 
 	int sum = 0 ;
 	int coef = 0 ;
@@ -511,8 +521,105 @@ void Labwork::labwork5_GPU_not_shared(int blockNumber, int blurDim) {
     
 }
 
-void Labwork::labwork6_GPU() {
 
+// Kernel for lab 6a 
+__global__ void binarization(uchar3 *input, uchar3 *output, int imageWidth, int imageHeight) {
+	
+	//getting the pixel with the second dimension
+	int tidx = (threadIdx.x + blockIdx.x * blockDim.x) ; 
+	int tidy = (threadIdx.y + blockIdx.y * blockDim.y) ;
+	
+	if (tidx >= imageWidth || tidy >= imageHeight) return ;
+	
+	int tid = tidx + imageWidth * tidy ;
+	
+	output[tid].x = (int) ((input[tid].x ) / 128) * 255;
+	output[tid].z = output[tid].y = output[tid].x;
+}
+
+void Labwork::labwork6_GPU_binarization(int blockNumber) {
+
+	// useful variables 
+	int pixelCount = inputImage->width * inputImage->height;
+
+	
+	// We set grid size and block size as dim3 variables
+	dim3 gridSize = dim3(inputImage->width / blockNumber, inputImage->height / blockNumber);
+	dim3 blockSize2 = dim3(blockNumber, blockNumber);
+	
+
+	// Allocating the output image 
+	outputImage = static_cast<char *>(malloc(pixelCount * 3));
+
+	// Allocating the device memory for the image (input and output) and weight matrix
+	uchar3 * devInput ; 
+	uchar3 * devBinarize ;
+	
+	cudaMalloc(&devInput, pixelCount * sizeof(uchar3));
+	cudaMalloc(&devBinarize, pixelCount * sizeof(uchar3));
+	
+	// Copying the data from CPU to GPU 
+	cudaMemcpy(devInput, inputImage->buffer, pixelCount * sizeof(uchar3), cudaMemcpyHostToDevice);
+	
+	// Using the kernel with the dim3 block and grid size
+	binarization<<<gridSize, blockSize2>>>(devInput, devBinarize, inputImage->width, inputImage->height) ; 
+	
+	// Gettting the results from GPU to CPU 
+	cudaMemcpy(outputImage, devBinarize, pixelCount * sizeof(uchar3), cudaMemcpyDeviceToHost);
+	
+	// FREEEE
+	cudaFree(devInput);
+	cudaFree(devBinarize);
+}
+
+// Kernel for lab 6b
+__global__ void brightness(uchar3 *input, uchar3 *output, int imageWidth, int imageHeight, int brightnessValue) {
+	
+	//getting the pixel with the second dimension
+	int tidx = (threadIdx.x + blockIdx.x * blockDim.x) ; 
+	int tidy = (threadIdx.y + blockIdx.y * blockDim.y) ;
+
+	if (tidx >= imageWidth || tidy >= imageHeight) return ;
+
+	int tid = tidx + imageWidth * tidy ;
+	unsigned char gray = (input[tid].x + input[tid].y + input[tid].z) /3;
+	int brightPx = gray + brightnessValue ; 
+	output[tid].z = output[tid].y = output[tid].x = brightPx ;
+}
+
+void labwork6_GPU_brightness(int blockNumber, int brightnessValue){
+	
+	// useful variables 
+	int pixelCount = inputImage->width * inputImage->height;
+
+	
+	// We set grid size and block size as dim3 variables
+	dim3 gridSize = dim3(inputImage->width / blockNumber, inputImage->height / blockNumber);
+	dim3 blockSize2 = dim3(blockNumber, blockNumber);
+	
+
+	// Allocating the output image 
+	outputImage = static_cast<char *>(malloc(pixelCount * 3));
+
+	// Allocating the device memory for the image (input and output) and weight matrix
+	uchar3 * devInput ; 
+	uchar3 * devBrighted ;
+	
+	cudaMalloc(&devInput, pixelCount * sizeof(uchar3));
+	cudaMalloc(&devBrighted, pixelCount * sizeof(uchar3));
+	
+	// Copying the data from CPU to GPU 
+	cudaMemcpy(devInput, inputImage->buffer, pixelCount * sizeof(uchar3), cudaMemcpyHostToDevice);
+	
+	// Using the kernel with the dim3 block and grid size
+	brightness<<<gridSize, blockSize2>>>(devInput, devBrighted, inputImage->width, inputImage->height, brightnessValue) ; 
+	
+	// Gettting the results from GPU to CPU 
+	cudaMemcpy(outputImage, devBrighted, pixelCount * sizeof(uchar3), cudaMemcpyDeviceToHost);
+	
+	// FREEEE
+	cudaFree(devInput);
+	cudaFree(devBrighted);
 }
 
 void Labwork::labwork7_GPU() {
