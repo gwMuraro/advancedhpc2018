@@ -3,6 +3,8 @@
 #include <include/jpegloader.h>
 #include <include/timer.h>
 
+
+
 class Labwork {
 
 private:
@@ -30,12 +32,26 @@ public:
 
     void labwork6_GPU_binarization(int blockNumber);
     void labwork6_GPU_brightness(int blockNumber, int brightnessValue);
-    void labwork6_GPU_blending(int blockNumber);
-    void labwork7_GPU();
+    void labwork6_GPU_blending(int blockNumber, JpegInfo * optImage, float blendCoeficient)  ;
+    void labwork7_GPU(int numBlock, int * histogram);
 
-    void labwork8_GPU();
+    void labwork8_GPU_maths();
+    void labwork8_GPU_scatter();
 
     void labwork9_GPU();
 
     void labwork10_GPU();
+};
+
+class Histogram {
+
+public :
+
+	int * tab ;
+
+	Histogram() ;
+	size_t size() ;
+	int getMin() ;
+	int getMax() ;	
+
 };
