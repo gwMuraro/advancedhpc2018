@@ -1,0 +1,209 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+
+\title{Report.10.kuwahara.tex}
+\author{gw.muraro}
+\date{November 1st 2018}
+
+\usepackage{natbib}
+\usepackage{graphicx}
+\usepackage{pgfplots}
+\usepackage{minted}
+\usepackage{hyperref}
+
+\begin{document}
+
+\maketitle
+\section{Labwork 10}
+
+\subsection{Explain how you implement the labworks}
+
+    Kuwahara filter requires a huge computing time in a CPU implementation. We are going to speed up by using parallelization. It uses a RGB to HSV conversion, and a mapping. We will see the steps to implement this map algorithm (HSV conversion is already explained in a previous labwork).
+   
+    \begin{enumerate}     
+
+    \item \textbf{Sumerize all the pixels values from the 4 windows surrounding our pixel}
+    
+    In order to gain in visibility and in variables declarations, we will use arrays. Our arrays will contain the sum of the R, G, B and V values of each windows surrounding our current pixel. 
+    The windows will be defined during a loop with four conditions, if it is top-left, top-right, bottom-left, bottom-right of our pixel. 
+    
+    \begin{minted}{c}
+/* ... IN THE KERNEL FUNCTION ... */
+// Tabs to avoid mutiple variables 
+float sumrgbvA[4] = {0,0,0,0};
+float sumrgbvB[4] = {0,0,0,0};
+float sumrgbvC[4] = {0,0,0,0};
+float sumrgbvD[4] = {0,0,0,0};
+
+// summing the windows 
+for (int i = -windowSize ; i <= windowSize ; i++) {
+    for (int j = -windowSize ; j <= windowSize ; j++) {
+    
+        // getting the relativ pixel Tid
+        int pixelIndex = (tidx + i) + width * (tidy + j) ;
+        
+        if (i < 1 && j < 1) { // top left window
+            add(sumrgbvA, input[pixelIndex], hsv.V[pixelIndex]) ;
+        }
+        if (i >= 0 && j < 1) { // top right window 
+            add(sumrgbvB, input[pixelIndex], hsv.V[pixelIndex]) ;
+        }
+        if (i < 1 && j >= 0) { // bottom left window
+            add(sumrgbvC, input[pixelIndex], hsv.V[pixelIndex]) ;
+        }
+        if (i >= 0 && j >= 0) { // bottom right window 
+            add(sumrgbvD, input[pixelIndex], hsv.V[pixelIndex]) ;
+        }			
+    }
+}
+
+/*... DEVICE FUNCTION ... */
+__device__ void add(float * sumrgbv, uchar3 inPixel, float V) {
+    sumrgbv[0] += float(inPixel.x) ; 
+    sumrgbv[1] += float(inPixel.y) ; 
+    sumrgbv[2] += float(inPixel.z) ; 
+    sumrgbv[3] += float(V) ;	
+}
+
+    \end{minted}
+   
+    Then we do an average of our arrays
+
+    \begin{minted}{c}
+for (int i = 0 ; i < 4 ; i++) {
+    sumrgbvA[i] /= (windowSize+1) * (windowSize+1) ;
+    sumrgbvB[i] /= (windowSize+1) * (windowSize+1) ;
+    sumrgbvC[i] /= (windowSize+1) * (windowSize+1) ;
+    sumrgbvD[i] /= (windowSize+1) * (windowSize+1) ;
+}
+
+    \end{minted}
+    
+    \item \textbf{Calculate the standard deviation sum}
+    
+    Again, we are going to use an array, containing the standard deviation sum of our four windows, and then calculate it, based on our previous arrays' V values : 
+    
+    \begin{minted}{c}
+// calculating the Standard deviation sum 
+float sumSDABCD[4] = {0,0,0,0};
+
+for (int i = -windowSize ; i <= windowSize ; i++) {
+    for (int j = -windowSize ; j <= windowSize ; j++) {
+            
+        int pixelIndex = (tidx + i) + width * (tidy + j) ;
+        
+        if (i < 1 && j < 1) {
+        	sumSDABCD[0] += (hsv.V[pixelIndex]-sumrgbvA[3]) *
+        	                (hsv.V[pixelIndex]-sumrgbvA[3]);
+        }
+        if (i >= 0 && j < 1) {
+        	sumSDABCD[1] += (hsv.V[pixelIndex]-sumrgbvB[3]) *
+        	                (hsv.V[pixelIndex]-sumrgbvB[3]);
+        }
+        if (i < 1 && j >= 0) {
+        	sumSDABCD[2] += (hsv.V[pixelIndex]-sumrgbvC[3]) *
+        	                (hsv.V[pixelIndex]-sumrgbvC[3]);
+        }
+        if (i >= 0 && j >= 0) {
+        	sumSDABCD[3] += (hsv.V[pixelIndex]-sumrgbvD[3]) *
+        	                (hsv.V[pixelIndex]-sumrgbvD[3]);
+        }
+    }
+}
+    \end{minted}
+    
+    \item \textbf{Finding the less brighter window}
+    
+    To avoid conditions, we will use a matrix of booleans. However, the problematic of this matrix is that if there is two windows with the same value, the thread will compute what he likes and wont be accurate at 100\%. So we use a matrix sum to know how much values are the sames. We use a matrix to apply a sort-of Lagrange polynomial equation further (and avoid conditions) :
+    
+    \begin{minted}{c}
+float minSD = min( min( min( sumSDABCD[0] , sumSDABCD[1] )
+                           , sumSDABCD[2] ), sumSDABCD[3] ) ;
+    // Which one is it ?
+    bool minSDTab[4] = {
+    	sumSDABCD[0] == minSD, 
+    	sumSDABCD[1] == minSD,
+    	sumSDABCD[2] == minSD,
+    	sumSDABCD[3] == minSD
+    } ;
+    // How much are they ? 
+    int sum_sum = minSDTab[0] + minSDTab[1] + minSDTab[2] + minSDTab[3];
+    \end{minted}
+    
+    \item \textbf{Finaly set the output}
+    
+    Like said earlier, we use a sort-of Lagrange polynomial to avoid conditions. The minimal SD value will multiply by one the R, G or B value of the A, B, C or D window, and the others will multiply by 0 the other values. At least there is only one value that is retained : 
+    
+    \begin{minted}{c}
+    // only the minimum of SD will have a *1 multiplication, 
+    // the others products are 0
+	output[tid].x = (minSDTab[0] * sumrgbvA[0]
+			  + minSDTab[1] * sumrgbvB[0] 
+			  + minSDTab[2] * sumrgbvC[0] 
+			  + minSDTab[3] * sumrgbvD[0]) / sum_sum ; 
+				  
+	output[tid].y = (minSDTab[0] * sumrgbvA[1]
+			  + minSDTab[1] * sumrgbvB[1] 
+			  + minSDTab[2] * sumrgbvC[1] 
+			  + minSDTab[3] * sumrgbvD[1]) / sum_sum ; 
+			  
+	output[tid].z = (minSDTab[0] * sumrgbvA[2]
+			  + minSDTab[1] * sumrgbvB[2] 
+			  + minSDTab[2] * sumrgbvC[2] 
+			  + minSDTab[3] * sumrgbvD[2]) / sum_sum ; 
+    \end{minted}
+    
+    
+    \end{enumerate}
+
+\subsection{Results}
+
+    By using a script and adapt the code to have a Kuwahara coefficient as third argument, we have these results : 
+   
+    \begin{verbatim}
+=== kuwahara with 3 coeff
+USTH ICT Master 2018, Advanced Programming for HPC.
+Warming up...
+Starting labwork 10
+labwork 10 ellapsed 48.8ms
+
+=== kuwahara with 6 coeff
+USTH ICT Master 2018, Advanced Programming for HPC.
+Warming up...
+Starting labwork 10
+labwork 10 ellapsed 84.3ms
+
+=== kuwahara with 9 coeff
+USTH ICT Master 2018, Advanced Programming for HPC.
+Warming up...
+Starting labwork 10
+labwork 10 ellapsed 285.8ms
+
+=== kuwahara with 12 coeff
+USTH ICT Master 2018, Advanced Programming for HPC.
+Warming up...
+Starting labwork 10
+labwork 10 ellapsed 235.5ms
+
+=== kuwahara with 18 coeff
+USTH ICT Master 2018, Advanced Programming for HPC.
+Warming up...
+Starting labwork 10
+labwork 10 ellapsed 472.4ms
+
+=== kuwahara with 30 coeff
+USTH ICT Master 2018, Advanced Programming for HPC.
+Warming up...
+Starting labwork 10
+labwork 10 ellapsed 1213.4ms
+
+    \end{verbatim}
+
+    These variations are due to a very complex kernel function : 
+    
+    $\Theta_{kwahara}(n) = \frac{2 * (n^{2} + n)}{block number}$
+    
+    
+
+\end{document}
+

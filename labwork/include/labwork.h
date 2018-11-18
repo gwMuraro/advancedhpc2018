@@ -33,25 +33,13 @@ public:
     void labwork6_GPU_binarization(int blockNumber);
     void labwork6_GPU_brightness(int blockNumber, int brightnessValue);
     void labwork6_GPU_blending(int blockNumber, JpegInfo * optImage, float blendCoeficient)  ;
-    void labwork7_GPU(int numBlock, int * histogram);
+    void labwork7_GPU(int numBlock);
 
     void labwork8_GPU_maths();
-    void labwork8_GPU_scatter();
+    void labwork8_GPU_scatter(int blockNumber);
 
     void labwork9_GPU();
 
-    void labwork10_GPU();
+    void labwork10_GPU(int kuwaharaCoef);
 };
 
-class Histogram {
-
-public :
-
-	int * tab ;
-
-	Histogram() ;
-	size_t size() ;
-	int getMin() ;
-	int getMax() ;	
-
-};

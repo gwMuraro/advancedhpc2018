@@ -1,0 +1,183 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+
+\title{Report.9.gather.tex}
+\author{gw.muraro}
+\date{November 1st 2018}
+
+\usepackage{natbib}
+\usepackage{graphicx}
+\usepackage{pgfplots}
+\usepackage{minted}
+\usepackage{hyperref}
+
+\begin{document}
+
+\maketitle
+\section{Labwork 9}
+
+\subsection{Explain how you implement the labworks}
+
+    The goal of this labwork is to implement and paralellize an histogram stretch algorithm. To achieve this goal, we are going to use a map-reduce and a map algorithm. 
+
+    \begin{enumerate}     
+
+    \item \textbf{Change Picture to histogram}
+    
+    We choose to use an histogram in one dimension, it is easier to use but requires some conditions. The size of this array will be $255 * blockNumber"$ (1 histogram per blocks). The main difficulty of this part is to avoid the simultaneous bank memory access (SBMA). To avoid this problem, we will share an array of gray value in cache, and only the first thread of the block will have the right to copy the cache to the output : 
+    
+    \begin{minted}{c}
+__global__ void histogramize(
+    uchar3 *input, 
+    int imageWidth, 
+    int imageHeight, 
+    int *histogram) {
+    
+    /* VERIFICATION */ [...]
+    int localtid = threadIdx.x ;
+    
+    /* IMPLEMENTATION */    
+    // Caching the gray values to shared memory for the first thread 
+    __shared__ int cacheHist[1024] ;	
+    cacheHist[threadIdx.x] = (input[tid].x 
+                            + input[tid].y 
+                            + input[tid].z) / 3;
+    __syncthreads();
+    	
+    /* only the first thread of the block is allowed to copy 
+    the shared memory to the output (avoid SBMA)*/
+    if (localtid == 0){
+        for (int i = 0 ; 
+            (i < 1024) && (tid + i < pixelCount) ; 
+            i++) {
+            
+            histogram[ blockIdx.x * 256 + cacheHist[i] ] ++;
+        }
+    }
+}
+    \end{minted}
+    
+    \item \textbf{Histogram reduction}
+    
+    The histogram reduction is made in two steps : the reduction of the block number in the CPU, and the reduction of histograms per blocks in the kernel function. 
+    
+    \begin{itemize}
+        \item First, the reduction of the block number in CPU. As we have a block size set to 1024, we can treat 4 histograms at the same time ($256 * 4 = 1024$). We will have an iteration in the CPU that will go from the gridSize (number of blocks), to 1 by dividing by 4 the gridSize at each iteration. We will set manually the last value to care in our giant histogram. It value will be the block number * the size of 1 histogram (256) : 
+    \begin{minted}{c}
+/* BLOCK NUMBER REDUCTION */
+// The endOfArrays shows the last value to 
+// care in our giant histogram
+int endOfArrays = gridSize * 256 - 1	   ;
+do {
+    // We treat 4 histogram at the same time 
+    // with our 1024 block-sized kernel
+    gridSize = int( ceil( float(gridSize)/4.0 ) ) ;
+    histogramReduction<<<gridSize, blockSize>>>(histogram, 
+                                                pixelCount, 
+                                                endOfArrays) ;
+    endOfArrays = gridSize * 256 - 1 ;
+	
+} while (gridSize > 1);
+    \end{minted}
+    
+        \item  Second step, we reduce in the cache our 4 histograms. The difficulty is to construct a shared array of 4 histogram well placed. To do so, we use modulo and division to know which is our current histogram, which is the current value of our histogram, etc.
+        Then, once we have these four well placed histograms, we can easily reduce the four histogram values to one.
+    
+        \begin{minted}{c}
+__global__ void histogramReduction( int * inHists, 
+                                    int pixelCount, 
+                                    int endOfArrays ) {
+
+    int tid = threadIdx.x + blockIdx.x * blockDim.x;	
+    int localtid = threadIdx.x ;
+    int bid = blockIdx.x ;
+    
+    if (tid > pixelCount) return ;
+    
+    // set up the 4 histogram in good places
+    int histIntensity = localtid % 256;
+    int histNumber = bid * 256 ; 
+    int firstValueOfHist = int(localtid/256) * gridDim.x * 256;
+    int localIndex = histNumber + histIntesity + firstValueOfHist; 
+    
+    if (localIndex > endOfArrays) return ;
+    
+    // store the histogram value in the right cache place 
+    __shared__ int cache[1024];
+    cache[localtid]  = inHists[localIndex] ;
+    __syncthreads();
+    
+    // Summing the 4 hists modularly
+    int step = 256 ;  // the step between two histograms 
+    int step_nb = 3 ; // the number of histogram to sum
+    if (localtid < 256)	{
+        for (int i = 1 ; i <= step_nb ; i++) {
+            cache[localtid] += cache[localtid + step*i] ;
+        }
+        // sending to Output array
+        inHists[localtid + bid *256] = cache[localtid] ;
+    }
+}
+        \end{minted}
+    
+    \end{itemize}
+    
+    Now that we have reduce our histograms to one, it contains all the intensity of our image's pixels. With this histogram, we can easily apply the map algorithm to our picture. However, with some tests, we found out that we had too much pixels in our histogram, comparing to the original image. Hopefully the added pixels does not change the proportions of intensity in the image, so we decided to do with. These added pixels have to be taken in count in the map algorithm as a "patch-work" : 
+    
+    \begin{minted}{c}
+__global__ void histogramStrecth(uchar3 * input, 
+                                 uchar3 * output, 
+                                 int * histogram, 
+                                 int pixelCount) {
+
+int tid = threadIdx.x + blockIdx.x * blockDim.x ; 
+if (tid > pixelCount) return ;
+
+__shared__ float cacheHisto[256] ; 
+__shared__ float n; // (patchwork) the total of pixel in the histogram 
+if (threadIdx.x < 256) cacheHisto[threadIdx.x] = histogram[threadIdx.x]; 
+n = 0.0 ;
+__syncthreads();
+
+if (threadIdx.x == 0){
+    // (patchwork : calculate n)
+    for (int i = 0 ; i < 256 ; i++) {
+        n += (float)cacheHisto[i];
+    }
+	
+    // calculate the sum of intensities proportions in cacheHisto 
+    // (suming the previous to avoid the double loop)
+    cacheHisto[0] = float(cacheHisto[0]) / float(n) ;
+    for (int i = 1 ; i < 256 ; i++) {
+        cacheHisto[i] = float(cacheHisto[i] / n) + cacheHisto[i-1]	;
+    }
+}
+__syncthreads();
+
+
+int grayValue = (input[tid].x + input[tid].y + input[tid].z) / 3 ;
+// converting the in value in stretched histogram value	
+output[tid].x = output[tid].y = output[tid].z = int(cacheHisto[grayValue] * 255) ;
+    \end{minted}
+    \end{enumerate}
+
+\subsection{Results}
+    After 10 launches, the computing time is, as you can see below, around 70 to 77 ms. 
+    \begin{verbatim}
+USTH ICT Master 2018, Advanced Programming for HPC.
+Warming up...
+Starting labwork 9
+labwork 9 ellapsed 72.0ms
+    \end{verbatim}
+    
+It is an high time of computing, and this is due to the huge number of loops in our kernels. You can see the complexity of our methods : 
+    
+    \begin{itemize}
+        \item $\Theta_{histogramize}(n) = n / blockNumber$  
+        \item $\Theta_{histogramReduction}(n) = n / blockNumber$  
+        \item $\Theta_{CPU_reduction}(n) = n * \Theta_{histogramReduction}(n)$
+        \item $\Theta_{histogramStretch}(n) = 2n / blockNumber$
+    \end{itemize}
+
+\end{document}
+
