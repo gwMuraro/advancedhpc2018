@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.12.3)
+cmake_minimum_required(VERSION 3.7.2)
 set(EXECUTABLE_NAME Exercise1)
 set(PROJECT_NAME Exercise1)
 
