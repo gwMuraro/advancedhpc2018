@@ -1,0 +1,1 @@
+/usr/bin/c++       CMakeFiles/LW4.dir/utils/chronoCPU.cpp.o CMakeFiles/LW4.dir/utils/ppm.cpp.o CMakeFiles/LW4.dir/LW4_generated_main.cu.o CMakeFiles/LW4.dir/LW4_generated_student.cu.o CMakeFiles/LW4.dir/LW4_generated_app.cu.o CMakeFiles/LW4.dir/utils/LW4_generated_chronoGPU.cu.o  -o LW4 -rdynamic /usr/local/cuda/lib64/libcudart_static.a -lpthread -ldl -lrt 

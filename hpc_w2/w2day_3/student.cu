@@ -129,7 +129,7 @@ thrust::host_vector<int> radixSort( const thrust::host_vector<int>& input ) {
 		thrust::scatter_if(d_input.begin(), d_input.end(), index_up.begin(), flags.begin(), d_output.begin());
 		
 	
-	
+		
 		if (i == 31){
 	//		for (int j = 1048400; j< 1048400 + 32 ; j++) { 
 	//			std::cout << "Bruh "<< index_down[index_down.size() - 1] <<" : " << d_output[j] << std::endl ;
