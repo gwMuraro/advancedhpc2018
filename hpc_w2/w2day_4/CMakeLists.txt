@@ -11,9 +11,9 @@ set(CMAKE_CXX_STANDARD 11)
 
 find_package(OpenGL REQUIRED)
 
-#set(CMAKE_PREFIX_PATH "d:/glew-2.1.0") 
-#set(CMAKE_LIBRARY_PATH "d:/glew-2.1.0/lib/Release/x64/") 
-#find_package(GLEW REQUIRED)
+set(CMAKE_PREFIX_PATH "d:/glew-2.1.0") 
+set(CMAKE_LIBRARY_PATH "d:/glew-2.1.0/lib/Release/x64/") 
+find_package(GLEW REQUIRED)
 
 find_package(CUDA REQUIRED)
 if (NOT CUDA_FOUND)
@@ -34,7 +34,7 @@ if (LINUX)
     link_libraries(-lfreeglut -lglew64) 
 endif(LINUX)
 
-#include_directories(utils ${GLEW_INCLUDE_DIR} "${CUDA_SAMPLES}inc")
+include_directories(utils ${GLEW_INCLUDE_DIR} "${CUDA_SAMPLES}inc")
 include_directories(utils "${CUDA_SAMPLES}inc")
 set(HEADERS student.hpp app.hpp utils/chronoGPU.hpp utils/chronoCPU.hpp utils/utils.cuh utils/common.hpp utils/ppm.hpp )
 set(SOURCES main.cu student.cu app.cu utils/chronoCPU.cpp utils/chronoGPU.cu utils/ppm.cpp )
