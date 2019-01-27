@@ -1,0 +1,36 @@
+#IncludeRegexLine: ^[ 	]*#[ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/gwendalmuraro/advancedhpc2018/projet/Project/utils/chronoCPU.cpp
+chronoCPU.hpp
+/home/gwendalmuraro/advancedhpc2018/projet/Project/utils/chronoCPU.hpp
+iostream
+-
+
+/home/gwendalmuraro/advancedhpc2018/projet/Project/utils/chronoCPU.hpp
+windows.h
+-
+sys/time.h
+-
+
+/home/gwendalmuraro/advancedhpc2018/projet/Project/utils/ppm.cpp
+ppm.hpp
+/home/gwendalmuraro/advancedhpc2018/projet/Project/utils/ppm.hpp
+
+/home/gwendalmuraro/advancedhpc2018/projet/Project/utils/ppm.hpp
+iostream
+-
+cstdlib
+-
+fstream
+-
+sstream
+-
+cstring
+-
+

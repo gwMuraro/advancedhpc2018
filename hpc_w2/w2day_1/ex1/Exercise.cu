@@ -79,7 +79,13 @@ void Exercise::Question2(thrust::host_vector<int>&A) const {
 	
 		// Mapping 
 		chrGPU.start();
-		thrust::transform(d_sequentials.begin(), d_sequentials.end(), d_constants.begin(), d_results.begin(), thrust::plus<int>());
+		thrust::transform(
+			d_sequentials.begin(), 
+			d_sequentials.end(), 
+			d_constants.begin(), 
+			d_results.begin(), 
+			thrust::plus<int>()
+		);
 		chrGPU.stop() ;
 	
 		// Copying the results 

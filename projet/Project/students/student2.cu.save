@@ -1,0 +1,166 @@
+#include "student2.hpp"
+
+// KERNEL 1 : RGB TO HSV VALUES (in fact, just V values, and not even divided by 255)
+__global__ void RGB2VKernel(uchar * input, int * hsv_v, int image_width, int image_height) {
+    
+    // getting the values of R, G and B that are scattered in the input.
+    __shared__ uchar rgb_cache[576] ;
+
+    // Getting the local TID 
+    int local_x = threadIdx.x + blockIdx.x * blockDim.x ;
+    int local_y = threadIdx.y + blockIdx.y * blockDim.y ;
+
+    int tid = local_x + local_y * image_width ;
+    int local_tid = threadIdx.x + threadIdx.y * blockDim.x ;
+    
+    // caching the Thread ID 
+    rgb_cache[local_tid] = input[tid] ;
+
+    __syncthreads() ;
+
+    // verifying if the r thread is not in conflict with the g and b one : 
+    if (local_tid % 3 != 0) return ;
+    
+    // getting rgb values : 
+    int r = (int) rgb_cache[local_tid];
+    int g = (int) rgb_cache[local_tid + 1];
+    int b = (int) rgb_cache[local_tid + 2];
+    
+    // Choosing the highest one (V = CMax)
+    int max_color = max(max(r, g), b) ;
+
+    // returning the V value
+    hsv_v[tid / 3] = max_color ;
+}
+
+// KERNEL 2 : Finding Neighbors and getting medians 
+__global__ void FindNeighborsMedian(int * input, int * output, int image_width, int image_height) {
+
+    // getting the TID 
+    int local_x = threadIdx.x + blockIdx.x * blockDim.x;
+    int local_y = threadIdx.y + blockIdx.y * blockDim.y;
+
+    int local_tid = local_x + local_y * image_width;
+    int index = 0;
+    int neighbors_v_values[9];
+
+    int neighbors_v_values_iterator = 0 ;
+
+    for (int i = -1 ; i <= 1 ; i++) {
+        for (int j = -1 ; j <= 1 ; j++) {
+        
+            // get the distant id 
+            int distant_x = local_x + i ;
+            int distant_y = local_y + j ;
+            int distant_tid = distant_x + distant_y * image_width ;
+
+            // testing if the distant value is still on the image        
+            if (
+                distant_tid < image_width * image_height ||
+                distant_tid > 0
+            )  {
+
+                neighbors_v_values[neighbors_v_values_iterator] = input[distant_tid] ;
+                neighbors_v_values_iterator++ ;
+            }
+        }
+    }
+
+    // Sorting the neighbor values with a bubble sort (in-place sorting algorithme)
+    for(int i = 9 - 1 ; i > 1  ; i--) {
+        for (int j = 0 ; j < i - 1 ; j++) {
+            if(neighbors_v_values[j+1] < neighbors_v_values[j]) {
+                // replace j+1 by J
+                int tmp = neighbors_v_values[j] ;
+                neighbors_v_values[j] = neighbors_v_values[j+1] ;
+                neighbors_v_values[j+1] = tmp ;
+            }
+        }
+    }
+
+    // returning the median value of the array 
+    output[local_tid] = neighbors_v_values[neighbors_v_values_iterator / 2] ;
+
+}
+
+// KERNEL 3 : Convert from HSV to RGB with median V values
+__global__ void ArrangingRGBWithV(uchar * image_in, int * values_in, int image_width, int image_weight){
+    // getting the values of R, G and B that are scattered in the input.
+    __shared__ uchar rgb_cache[576] ;
+
+    // Getting the local TID
+    int local_x = threadIdx.x + blockIdx.x * blockDim.x ;
+    int local_y = threadIdx.y + blockIdx.y * blockDim.y ;
+
+    int tid = local_x + local_y * image_width ;
+    int local_tid = threadIdx.x + threadIdx.y * blockDim.x ;
+
+    // caching the Thread ID
+    rgb_cache[local_tid] = input[tid] ;
+
+    __syncthreads() ;
+
+    // verifying if the r thread is not in conflict with the g and b one :
+    if (local_tid % 3 != 0) return ;
+
+    // getting rgb values :
+    int r = (int) rgb_cache[local_tid];
+    int g = (int) rgb_cache[local_tid + 1];
+    int b = (int) rgb_cache[local_tid + 2];
+
+    // Choosing the highest one (V = CMax)
+    
+
+    // changing the V value with our median value
+    
+
+    // returning the V value
+    hsv_v[tid / 3] = max_color ;
+
+}
+
+
+// MAIN FUNCTION 
+float student2(const PPMBitmap &in, PPMBitmap &out, const int size) { 
+
+    // Usefull variables 
+    int pixel_count = in.getWidth() * in.getHeight() ;
+    int pointer_size = pixel_count * 3 ;
+    int block_size  = 24*24 ; 
+    int grid_size   = pixel_count / block_size ;
+    
+    
+    // Device arrays 
+    uchar * device_input ;
+    int * device_hsv_v ;
+    uchar * device_output ; 
+
+    // Host arrays 
+    uchar * pixel_ptr   = in.getPtr() ;
+    uchar * host_output = (uchar *)malloc(sizeof(uchar) * pixel_count * 3) ;
+
+
+    // Allocation of device arrays
+    cudaMalloc(&device_input, sizeof(uchar) * pointer_size) ;
+    cudaMalloc(&device_hsv_v, sizeof(int) * pixel_count) ;
+    cudaMalloc(&device_output, sizeof(uchar) * pointer_size) ;
+
+    // Copying input values to device 
+    cudaMemcpy(device_input, pixel_ptr, sizeof(uchar) * pointer_size, cudaMemcpyHostToDevice) ;
+
+    // Getting the V values in device_hsv_v
+    RGB2VKernel<<<grid_size * 3, block_size>>>(device_input, device_hsv_v, in.getWidth(), in.getHeight());
+
+    // Computing neighbors median v values
+    FindNeighborsMedian<<<grid_size, block_size>>>(device_hsv_v, device_hsv_v, in.getWidth(), in.getHeight()) ;
+
+    // Going back to RGB 
+    //ArrangingRGBWithV
+
+    cudaFree(device_input) ;
+    cudaFree(device_hsv_v) ;
+    cudaFree(device_output) ;
+
+    return 0.0f ;
+
+}
